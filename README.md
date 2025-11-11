@@ -65,35 +65,46 @@ This project demonstrates a full RAG implementation that combines document chunk
 
 ## Usage
 
-### Full RAG Pipeline
+### Modular RAG Pipeline (Recommended)
 
-Run the complete RAG pipeline with Pinecone vector storage:
+The application now uses a clean modular architecture:
 
 ```bash
-python rag-pipeline-pinecone.py
+python example.py
 ```
 
-This script will:
-1. Chunk sample documents into smaller pieces
-2. Generate embeddings for each chunk
-3. Store vectors in Pinecone
-4. Retrieve relevant chunks for a query
-5. Generate an answer using Llama 3.3 70B
+This demonstrates the full pipeline:
+1. Initialize the RAG pipeline
+2. Ingest and chunk documents
+3. Generate and store embeddings
+4. Query the system with natural language
+5. Generate grounded answers with sources
 
-### Document Chunking Only
+### Using the Pipeline in Your Code
 
-To test document chunking independently:
+```python
+from rag_app.pipeline import RAGPipeline
 
-```bash
-python chunk.py
+# Initialize
+pipeline = RAGPipeline()
+
+# Ingest documents
+documents = ["Your text here...", "More text..."]
+result = pipeline.ingest_documents(documents)
+
+# Query
+answer = pipeline.query("Your question here?")
+print(answer['answer'])
 ```
 
-### Basic Embedding Generation
+### Legacy Scripts
 
-Run the basic embedding example:
+The original monolithic scripts are still available:
 
 ```bash
-python sample1.py
+python rag-pipeline-pinecone.py  # Original complete pipeline
+python chunk.py                   # Document chunking test
+python sample1.py                 # Basic embeddings
 ```
 
 ## How It Works
@@ -117,18 +128,49 @@ Retrieved chunks are passed as context to Llama 3.3 70B, which generates a groun
 
 ```
 rag-openrouter/
-├── rag-pipeline-pinecone.py  # Complete RAG pipeline implementation
-├── chunk.py                   # Document chunking and ingestion script
-├── sample1.py                 # Basic embedding generation example
+├── rag_app/                   # Main application package
+│   ├── __init__.py           # Package initialization
+│   ├── config.py             # Configuration management
+│   ├── embeddings.py         # Embedding generation service
+│   ├── vector_store.py       # Pinecone vector database operations
+│   ├── document_processor.py # Document chunking logic
+│   ├── retriever.py          # Semantic search retrieval
+│   ├── generator.py          # LLM answer generation
+│   └── pipeline.py           # Main RAG pipeline orchestrator
+├── example.py                 # Example usage of modular pipeline
+├── rag-pipeline-pinecone.py  # Legacy monolithic implementation
+├── chunk.py                   # Legacy chunking script
+├── sample1.py                 # Legacy embedding example
 ├── pyproject.toml             # Project configuration and dependencies
 ├── .env                       # Environment variables (not tracked in git)
 └── README.md                  # This file
 ```
 
+## Architecture
+
+The modular design separates concerns:
+
+- **config.py**: Centralized configuration with environment variable management
+- **embeddings.py**: Handles all embedding generation via OpenRouter
+- **vector_store.py**: Abstracts Pinecone operations (upsert, query, delete)
+- **document_processor.py**: Text chunking with LangChain splitters
+- **retriever.py**: Combines embeddings + vector search for semantic retrieval
+- **generator.py**: LLM-based answer generation with context
+- **pipeline.py**: Orchestrates all components into a unified workflow
+
 ## Configuration
 
-Key parameters in `rag-pipeline-pinecone.py`:
+Configure via environment variables in `.env` or programmatically:
 
+```python
+from rag_app.config import Config
+
+config = Config.from_env()
+config.chunk_size = 1500  # Override defaults
+config.top_k = 5
+```
+
+**Key parameters:**
 - **chunk_size**: 1000 characters (adjustable for your documents)
 - **chunk_overlap**: 200 characters (prevents context loss at boundaries)
 - **embedding_model**: openai/text-embedding-3-large (3072 dimensions)
