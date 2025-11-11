@@ -93,6 +93,40 @@ class RAGPipeline:
 
         return result
 
+    def query_stream(
+        self,
+        question: str,
+        top_k: int = None,
+        return_sources: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Query the RAG system with streaming response
+
+        Args:
+            question: User question
+            top_k: Number of chunks to retrieve
+            return_sources: Whether to include source chunks in response
+
+        Returns:
+            Dictionary with stream iterator and metadata
+
+        Example:
+            result = pipeline.query_stream("What is RAG?")
+            for chunk in result['stream']:
+                print(chunk, end="", flush=True)
+            print(f"\\nSources: {result['num_sources']}")
+        """
+        # Retrieve relevant chunks
+        context = self.retriever.retrieve_texts(question, top_k=top_k)
+
+        # Generate streaming answer
+        result = self.generator.generate_stream_with_metadata(question, context)
+
+        if not return_sources:
+            result.pop("sources", None)
+
+        return result
+
     def clear_index(self):
         """Clear all vectors from the index"""
         self.vector_store.delete_all()

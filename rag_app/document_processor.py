@@ -24,19 +24,34 @@ class DocumentProcessor:
 
     def process_documents(
         self,
-        documents: List[str],
+        documents: List[str] | str,
         source_prefix: str = "doc"
     ) -> tuple[List[str], List[Dict[str, Any]]]:
         """
         Process documents into chunks with metadata
 
+        Handles both single document (str) and multiple documents (List[str])
+
         Args:
-            documents: List of document strings
-            source_prefix: Prefix for source identifiers
+            documents: Single document string or list of document strings
+            source_prefix: Prefix for source identifiers (or exact ID for single doc)
 
         Returns:
             Tuple of (chunks, metadata)
+
+        Examples:
+            # Single document
+            chunks, meta = processor.process_documents("Text here", source_prefix="my_doc")
+            # Result: source = "my_doc_0"
+
+            # Multiple documents
+            chunks, meta = processor.process_documents(["Doc 1", "Doc 2"], source_prefix="doc")
+            # Result: sources = "doc_0", "doc_1"
         """
+        # Normalize input to list
+        if isinstance(documents, str):
+            documents = [documents]
+
         chunks = []
         metadata = []
 
@@ -51,32 +66,5 @@ class DocumentProcessor:
                 }
                 for j in range(len(doc_chunks))
             ])
-
-        return chunks, metadata
-
-    def process_single_document(
-        self,
-        document: str,
-        source_id: str = "doc_0"
-    ) -> tuple[List[str], List[Dict[str, Any]]]:
-        """
-        Process a single document
-
-        Args:
-            document: Document string
-            source_id: Source identifier
-
-        Returns:
-            Tuple of (chunks, metadata)
-        """
-        chunks = self.splitter.split_text(document)
-        metadata = [
-            {
-                "source": source_id,
-                "chunk": i,
-                "total_chunks": len(chunks)
-            }
-            for i in range(len(chunks))
-        ]
 
         return chunks, metadata

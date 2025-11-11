@@ -21,16 +21,31 @@ class EmbeddingService:
             api_key=config.openrouter_api_key
         )
 
-    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    def embed_texts(self, texts: List[str] | str) -> List[List[float]]:
         """
-        Generate embeddings for multiple texts
+        Generate embeddings for one or more texts
+
+        Handles both single text (str) and multiple texts (List[str])
 
         Args:
-            texts: List of text strings to embed
+            texts: Single text string or list of text strings
 
         Returns:
-            List of embedding vectors
+            List of embedding vectors (always returns a list, even for single text)
+
+        Examples:
+            # Single text
+            embeddings = service.embed_texts("Hello world")
+            # Returns: [[0.1, 0.2, ...]]
+
+            # Multiple texts
+            embeddings = service.embed_texts(["Text 1", "Text 2"])
+            # Returns: [[0.1, 0.2, ...], [0.3, 0.4, ...]]
         """
+        # Normalize input to list
+        if isinstance(texts, str):
+            texts = [texts]
+
         response = self.client.embeddings.create(
             model=self.config.embedding_model,
             input=texts
@@ -41,14 +56,12 @@ class EmbeddingService:
         """
         Generate embedding for a single text
 
+        Convenience method that returns a single vector instead of a list
+
         Args:
             text: Text string to embed
 
         Returns:
-            Embedding vector
+            Single embedding vector
         """
-        response = self.client.embeddings.create(
-            model=self.config.embedding_model,
-            input=text
-        )
-        return response.data[0].embedding
+        return self.embed_texts(text)[0]
