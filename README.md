@@ -14,6 +14,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - **Semantic Retrieval**: Find relevant document chunks based on query similarity
 - **Hybrid Search**: Combine vector similarity with BM25 keyword matching for improved retrieval
 - **Two-Stage Retrieval**: Optional reranking with cross-encoder models for improved precision
+- **Document Classification**: Example-based categorization using embedding similarity
 - **LLM Generation**: Answer questions using retrieved context with Meta's Llama 3.3 70B
 - **Streaming Responses**: Real-time text generation for better user experience
 - **Complete RAG Pipeline**: End-to-end workflow from document ingestion to answer generation
@@ -275,6 +276,86 @@ print(result['answer'])
 
 This approach provides maximum retrieval quality by leveraging semantic search, keyword matching, and precision reranking.
 
+### Document Classification
+
+Classify documents into categories using example-based embedding similarity:
+
+```bash
+python example_classification.py
+```
+
+Or use programmatically:
+
+```python
+from rag_app import DocumentClassifier
+
+# Initialize classifier
+classifier = DocumentClassifier()
+
+# Define categories with examples
+category_examples = {
+    "technical": [
+        "Python programming guide",
+        "API documentation",
+        "Software architecture patterns"
+    ],
+    "business": [
+        "Quarterly earnings report",
+        "Market research findings",
+        "Sales strategy document"
+    ],
+    "support": [
+        "How to reset password",
+        "Installation troubleshooting",
+        "FAQ about billing"
+    ]
+}
+
+classifier.set_categories(category_examples)
+
+# Classify a single document
+doc = "The new authentication API endpoint supports OAuth 2.0"
+category, confidence = classifier.classify(doc)
+print(f"Category: {category}, Confidence: {confidence:.3f}")
+
+# View all category scores
+all_scores = classifier.classify(doc, return_all_scores=True)
+for cat, score in sorted(all_scores.items(), key=lambda x: x[1], reverse=True):
+    print(f"{cat}: {score:.3f}")
+
+# Classify multiple documents efficiently
+documents = ["API guide", "Sales report", "Bug fix tutorial"]
+results = classifier.classify_batch(documents)
+for doc, (cat, conf) in zip(documents, results):
+    print(f"{doc} -> {cat} ({conf:.3f})")
+
+# Add new categories dynamically
+classifier.add_category("marketing", [
+    "Email campaign metrics",
+    "Brand awareness strategy",
+    "SEO optimization guide"
+])
+```
+
+**How It Works:**
+- **Zero-Shot Classification**: No training required, just provide examples
+- **Embedding Similarity**: Compares document embeddings to category examples
+- **Confidence Scoring**: Returns scores for all categories
+- **Dynamic Categories**: Add/remove categories anytime
+
+**Use Cases:**
+- Content categorization and organization
+- Support ticket routing to teams
+- Intent detection in customer communications
+- Document filtering and quality control
+- Automatic tagging and labeling
+
+**Tips for Better Results:**
+- Provide 3-10 diverse examples per category
+- Use examples with domain-specific terminology
+- Set confidence thresholds for uncertain cases
+- Combine with RAG for context-aware classification
+
 ### Legacy Scripts
 
 The original monolithic scripts are still available:
@@ -316,7 +397,16 @@ For improved precision, the system can:
 
 This approach combines the speed of bi-encoder embeddings with the precision of cross-encoder models, improving retrieval quality with minimal latency increase (~100-200ms).
 
-### 7. Answer Generation
+### 7. Document Classification (Optional)
+For content categorization without RAG:
+1. **Define Categories**: Provide example documents for each category
+2. **Embed Examples**: Generate embeddings for all category examples
+3. **Classify Documents**: Compare new documents to category examples using cosine similarity
+4. **Score Averaging**: Average similarity across all examples in each category
+
+This zero-shot approach enables instant classification without model training, ideal for content routing and organization.
+
+### 8. Answer Generation
 Retrieved chunks are passed as context to Llama 3.3 70B, which generates a grounded answer based only on the provided information.
 
 ## Project Structure
@@ -332,6 +422,7 @@ rag-openrouter/
 │   ├── retriever.py          # Semantic search retrieval
 │   ├── hybrid_search.py      # BM25 keyword + vector hybrid search
 │   ├── reranker.py           # Cross-encoder reranking
+│   ├── classifier.py         # Example-based document classification
 │   ├── generator.py          # LLM answer generation
 │   ├── pdf_loader.py         # PDF document loader
 │   └── pipeline.py           # Main RAG pipeline orchestrator
@@ -340,6 +431,7 @@ rag-openrouter/
 ├── example_streaming.py       # Streaming responses example
 ├── example_hybrid_search.py   # Hybrid search (vector + keyword) example
 ├── example_reranking.py       # Two-stage retrieval example
+├── example_classification.py  # Document classification example
 ├── example_pdf_loader.py      # PDF loader usage example
 ├── generate_pdfs.py           # Script to generate sample PDFs
 ├── rag-pipeline-pinecone.py  # Legacy monolithic implementation
@@ -361,6 +453,7 @@ The modular design separates concerns:
 - **retriever.py**: Combines embeddings + vector search for semantic retrieval
 - **hybrid_search.py**: BM25 keyword matching combined with vector similarity
 - **reranker.py**: Cross-encoder models for precision reranking
+- **classifier.py**: Example-based document classification using embedding similarity
 - **generator.py**: LLM-based answer generation with context and streaming
 - **pdf_loader.py**: PDF document loading with metadata support
 - **pipeline.py**: Orchestrates all components into a unified workflow
