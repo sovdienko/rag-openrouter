@@ -1,13 +1,19 @@
 """Example usage of RAG pipeline with streaming responses"""
 
 from rag_app.pipeline import RAGPipeline
+from rag_app.pdf_loader import PDFLoader
+
+
+# Load documents from PDF files with metadata (includes filenames)
+loader = PDFLoader()
+documents = loader.load_with_metadata("rag-docs")
 
 # Sample documents
-documents = [
-    "The Python programming language was created by Guido van Rossum and first released in 1991. It emphasizes code readability with significant whitespace.",
-    "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.",
-    "Retrieval-Augmented Generation (RAG) combines information retrieval with large language model generation to provide accurate, grounded responses.",
-]
+# documents = [
+#     "The Python programming language was created by Guido van Rossum and first released in 1991. It emphasizes code readability with significant whitespace.",
+#     "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.",
+#     "Retrieval-Augmented Generation (RAG) combines information retrieval with large language model generation to provide accurate, grounded responses.",
+# ]
 
 def main():
     # Initialize pipeline

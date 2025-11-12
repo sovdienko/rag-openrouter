@@ -9,6 +9,8 @@ dependencies = [
     "langchain-text-splitters>=1.0.0",
     "openai>=2.7.2",
     "pinecone>=7.3.0",
+    "pypdf>=6.2.0",
     "python-dotenv>=1.0.0",
+    "reportlab>=4.4.4",
     "sentence-transformers>=5.1.2",
 ]

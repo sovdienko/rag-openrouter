@@ -45,22 +45,36 @@ class RAGPipeline:
 
     def ingest_documents(
         self,
-        documents: List[str],
+        documents: List[str] | List[Dict[str, Any]],
         source_prefix: str = "doc"
     ) -> Dict[str, Any]:
         """
         Ingest documents into the RAG system
 
         Args:
-            documents: List of document strings
+            documents: List of document strings OR list of dicts with 'text' and metadata
+                      Examples:
+                      - ["text1", "text2"]
+                      - [{"text": "...", "filename": "doc1.pdf"}, {"text": "...", "filename": "doc2.pdf"}]
             source_prefix: Prefix for source identifiers
 
         Returns:
             Dictionary with ingestion statistics
         """
+        # Extract texts and metadata if documents are dicts
+        if documents and isinstance(documents[0], dict):
+            texts = [doc["text"] for doc in documents]
+            doc_metadata = [
+                {k: v for k, v in doc.items() if k != "text"}
+                for doc in documents
+            ]
+        else:
+            texts = documents
+            doc_metadata = None
+
         # Process documents into chunks
         chunks, metadata = self.document_processor.process_documents(
-            documents, source_prefix
+            texts, source_prefix, doc_metadata
         )
 
         # Generate embeddings
@@ -70,7 +84,7 @@ class RAGPipeline:
         num_vectors = self.vector_store.upsert_vectors(chunks, embeddings, metadata)
 
         return {
-            "num_documents": len(documents),
+            "num_documents": len(texts),
             "num_chunks": len(chunks),
             "num_vectors": num_vectors,
             "status": "success"

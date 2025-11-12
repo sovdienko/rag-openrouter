@@ -26,6 +26,8 @@ This project demonstrates a full RAG implementation that combines document chunk
 - python-dotenv >= 1.0.0
 - pinecone-client >= 3.0.0
 - langchain-text-splitters >= 1.0.0
+- pypdf >= 6.0.0 (for PDF loading)
+- reportlab >= 4.0.0 (for PDF generation)
 - sentence-transformers >= 5.0.0 (optional, for reranking)
 
 ## Installation
@@ -100,6 +102,51 @@ result = pipeline.ingest_documents(documents)
 answer = pipeline.query("Your question here?")
 print(answer['answer'])
 ```
+
+### Loading PDF Documents
+
+Use the PDFLoader to load documents from PDF files:
+
+```bash
+python example_pdf_loader.py
+```
+
+Or use programmatically:
+
+```python
+from rag_app import PDFLoader, RAGPipeline
+
+# Load PDFs from folder (text only)
+loader = PDFLoader()
+documents = loader.load_from_folder("rag-docs")
+
+# Load with metadata (RECOMMENDED - includes filename tracking)
+docs_with_metadata = loader.load_with_metadata("rag-docs")
+for doc in docs_with_metadata:
+    print(f"File: {doc['filename']}")
+    print(f"Text: {doc['text'][:100]}...")
+
+# Load single PDF
+text = loader.load_single_file("document.pdf")
+
+# Use with RAG pipeline - metadata is automatically stored in vector DB
+pipeline = RAGPipeline()
+pipeline.ingest_documents(docs_with_metadata)  # Filenames stored in Pinecone!
+answer = pipeline.query("Your question?")
+
+# Access source filenames in retrieval results
+results = pipeline.retriever.retrieve("Your question?", top_k=3)
+for result in results:
+    print(f"From: {result['metadata']['source']}")  # Source contains filename
+    print(f"Chunk: {result['metadata']['chunk'] + 1}/{result['metadata']['total_chunks']}")
+    print(f"Text: {result['text']}")
+```
+
+**Filename Tracking:** When using `load_with_metadata()`, each chunk stored in Pinecone includes:
+- `source`: PDF filename (e.g., "ai_topic_01.pdf") - directly contains the filename
+- `chunk`: Chunk number within document (0-indexed)
+- `total_chunks`: Total chunks in document
+- `text`: The actual chunk content
 
 ### Two-Stage Retrieval with Reranking
 
@@ -182,10 +229,14 @@ rag-openrouter/
 │   ├── retriever.py          # Semantic search retrieval
 │   ├── reranker.py           # Cross-encoder reranking
 │   ├── generator.py          # LLM answer generation
+│   ├── pdf_loader.py         # PDF document loader
 │   └── pipeline.py           # Main RAG pipeline orchestrator
+├── rag-docs/                  # Sample PDF documents for testing
 ├── example.py                 # Example usage of modular pipeline
 ├── example_streaming.py       # Streaming responses example
 ├── example_reranking.py       # Two-stage retrieval example
+├── example_pdf_loader.py      # PDF loader usage example
+├── generate_pdfs.py           # Script to generate sample PDFs
 ├── rag-pipeline-pinecone.py  # Legacy monolithic implementation
 ├── chunk.py                   # Legacy chunking script
 ├── sample1.py                 # Legacy embedding example
@@ -205,6 +256,7 @@ The modular design separates concerns:
 - **retriever.py**: Combines embeddings + vector search for semantic retrieval
 - **reranker.py**: Cross-encoder models for precision reranking
 - **generator.py**: LLM-based answer generation with context and streaming
+- **pdf_loader.py**: PDF document loading with metadata support
 - **pipeline.py**: Orchestrates all components into a unified workflow
 
 ## Configuration
