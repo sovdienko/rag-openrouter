@@ -69,7 +69,8 @@ class RAGPipeline:
         self,
         question: str,
         top_k: int = None,
-        return_sources: bool = True
+        return_sources: bool = True,
+        stream: bool = False
     ) -> Dict[str, Any]:
         """
         Query the RAG system
@@ -78,15 +79,26 @@ class RAGPipeline:
             question: User question
             top_k: Number of chunks to retrieve
             return_sources: Whether to include source chunks in response
+            stream: If True, returns streaming response
 
         Returns:
-            Dictionary with answer and metadata
+            Dictionary with answer/stream and metadata
+
+        Examples:
+            # Non-streaming
+            result = pipeline.query("What is RAG?")
+            print(result['answer'])
+
+            # Streaming
+            result = pipeline.query("What is RAG?", stream=True)
+            for chunk in result['stream']:
+                print(chunk, end="", flush=True)
         """
         # Retrieve relevant chunks
         context = self.retriever.retrieve_texts(question, top_k=top_k)
 
         # Generate answer
-        result = self.generator.generate_with_metadata(question, context)
+        result = self.generator.generate_with_metadata(question, context, stream=stream)
 
         if not return_sources:
             result.pop("sources", None)
@@ -102,6 +114,8 @@ class RAGPipeline:
         """
         Query the RAG system with streaming response
 
+        Convenience wrapper for query(stream=True)
+
         Args:
             question: User question
             top_k: Number of chunks to retrieve
@@ -116,16 +130,7 @@ class RAGPipeline:
                 print(chunk, end="", flush=True)
             print(f"\\nSources: {result['num_sources']}")
         """
-        # Retrieve relevant chunks
-        context = self.retriever.retrieve_texts(question, top_k=top_k)
-
-        # Generate streaming answer
-        result = self.generator.generate_stream_with_metadata(question, context)
-
-        if not return_sources:
-            result.pop("sources", None)
-
-        return result
+        return self.query(question, top_k=top_k, return_sources=return_sources, stream=True)
 
     def clear_index(self):
         """Clear all vectors from the index"""
