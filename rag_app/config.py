@@ -22,7 +22,7 @@ class Config:
     llm_model: str = "meta-llama/llama-3.3-70b-instruct"
 
     # Pinecone settings
-    index_name: str = "rag-documents"
+    index_name: str = "rag-doc-classification"
     embedding_dimension: int = 3072
     similarity_metric: str = "cosine"
     cloud_provider: str = "aws"

@@ -15,6 +15,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - **Hybrid Search**: Combine vector similarity with BM25 keyword matching for improved retrieval
 - **Two-Stage Retrieval**: Optional reranking with cross-encoder models for improved precision
 - **Document Classification**: Example-based categorization using embedding similarity
+- **Document Clustering**: Automatic topic discovery and grouping using K-Means clustering
 - **LLM Generation**: Answer questions using retrieved context with Meta's Llama 3.3 70B
 - **Streaming Responses**: Real-time text generation for better user experience
 - **Complete RAG Pipeline**: End-to-end workflow from document ingestion to answer generation
@@ -32,6 +33,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - reportlab >= 4.0.0 (for PDF generation)
 - sentence-transformers >= 5.0.0 (optional, for reranking)
 - rank-bm25 >= 0.2.2 (optional, for hybrid search)
+- scikit-learn >= 1.5.0 (optional, for clustering)
 
 ## Installation
 
@@ -356,6 +358,82 @@ classifier.add_category("marketing", [
 - Set confidence thresholds for uncertain cases
 - Combine with RAG for context-aware classification
 
+### Document Clustering
+
+Automatically discover groups and topics in unlabeled document collections:
+
+```bash
+python example_clustering.py
+```
+
+Or use programmatically:
+
+```python
+from rag_app import DocumentClusterer
+
+# Initialize clusterer
+clusterer = DocumentClusterer()
+
+# Cluster customer feedback into groups
+feedback = [
+    "Login takes too long",
+    "Great customer support",
+    "App crashes on iOS",
+    "Love the dark mode",
+    "Please add PDF export",
+    # ... more items
+]
+
+# Cluster into 3 groups
+clusters = clusterer.cluster(feedback, n_clusters=3)
+for cluster_id, items in clusters.items():
+    print(f"\nCluster {cluster_id}: {len(items)} items")
+    for item in items[:3]:  # Show first 3
+        print(f"  - {item}")
+
+# Get cluster with metadata (sorted by relevance)
+clusters_meta = clusterer.cluster_with_metadata(feedback, n_clusters=3)
+for cluster_id, items in clusters_meta.items():
+    print(f"\nCluster {cluster_id} (most representative):")
+    for item in items[:2]:
+        print(f"  - {item['text']} (distance: {item['distance']:.4f})")
+
+# Find optimal number of clusters
+scores = clusterer.find_optimal_clusters(feedback, min_clusters=2, max_clusters=6)
+best_k = max(scores.items(), key=lambda x: x[1])[0]
+print(f"Optimal clusters: {best_k}")
+
+# Predict cluster for new documents
+cluster_id, distance = clusterer.predict_cluster("New feedback text")
+print(f"Belongs to cluster {cluster_id}")
+
+# Get cluster summaries
+summaries = clusterer.get_cluster_summaries(clusters)
+for cluster_id, summary in summaries.items():
+    print(f"Cluster {cluster_id}: {summary['size']} docs ({summary['percentage']:.1f}%)")
+```
+
+**How It Works:**
+- **K-Means Clustering**: Groups documents by embedding similarity
+- **Automatic Discovery**: No labels required - finds patterns automatically
+- **Silhouette Analysis**: Helps find optimal number of clusters
+- **Distance Metrics**: Identifies most representative documents per cluster
+
+**Use Cases:**
+- Customer feedback analysis and theme discovery
+- Support ticket organization and routing
+- Bug report grouping and deduplication
+- Content organization and taxonomy creation
+- Market research and sentiment clustering
+- Email categorization and filtering
+
+**Tips for Better Results:**
+- Start with 3-7 clusters for most use cases
+- Use `find_optimal_clusters()` to determine best cluster count
+- Review cluster examples to verify coherence
+- Combine with classification to label discovered clusters
+- Re-cluster periodically as data evolves
+
 ### Legacy Scripts
 
 The original monolithic scripts are still available:
@@ -406,7 +484,16 @@ For content categorization without RAG:
 
 This zero-shot approach enables instant classification without model training, ideal for content routing and organization.
 
-### 8. Answer Generation
+### 8. Document Clustering (Optional)
+For automatic topic discovery in unlabeled data:
+1. **Generate Embeddings**: Convert all documents to vector embeddings
+2. **K-Means Clustering**: Group documents by embedding similarity
+3. **Cluster Assignment**: Assign each document to nearest cluster center
+4. **Optimization**: Use silhouette analysis to find optimal cluster count
+
+This unsupervised approach automatically discovers hidden patterns and themes in document collections.
+
+### 9. Answer Generation
 Retrieved chunks are passed as context to Llama 3.3 70B, which generates a grounded answer based only on the provided information.
 
 ## Project Structure
