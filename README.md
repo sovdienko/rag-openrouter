@@ -12,6 +12,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - **Vector Embeddings**: Generate high-quality embeddings using OpenAI's text-embedding-3-large (3072 dimensions)
 - **Vector Storage**: Pinecone serverless vector database with cosine similarity search
 - **Semantic Retrieval**: Find relevant document chunks based on query similarity
+- **Hybrid Search**: Combine vector similarity with BM25 keyword matching for improved retrieval
 - **Two-Stage Retrieval**: Optional reranking with cross-encoder models for improved precision
 - **LLM Generation**: Answer questions using retrieved context with Meta's Llama 3.3 70B
 - **Streaming Responses**: Real-time text generation for better user experience
@@ -29,6 +30,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - pypdf >= 6.0.0 (for PDF loading)
 - reportlab >= 4.0.0 (for PDF generation)
 - sentence-transformers >= 5.0.0 (optional, for reranking)
+- rank-bm25 >= 0.2.2 (optional, for hybrid search)
 
 ## Installation
 
@@ -148,6 +150,64 @@ for result in results:
 - `total_chunks`: Total chunks in document
 - `text`: The actual chunk content
 
+### Hybrid Search (Vector + Keyword)
+
+Combine vector similarity with BM25 keyword matching for improved retrieval:
+
+```bash
+python example_hybrid_search.py
+```
+
+Or use programmatically:
+
+```python
+from rag_app.pipeline import RAGPipeline
+
+# Enable hybrid search during initialization
+pipeline = RAGPipeline(use_hybrid=True, hybrid_alpha=0.5)
+pipeline.ingest_documents(documents)
+
+# Query with hybrid search (50% vector + 50% keyword)
+result = pipeline.query(
+    "What is BM25 ranking algorithm?",
+    top_k=3,
+    initial_k=20  # Retrieve more candidates for hybrid scoring
+)
+print(result['answer'])
+
+# Access hybrid scores
+results = pipeline.retriever.retrieve(
+    "Your question?",
+    top_k=3,
+    use_hybrid=True,
+    initial_k=20
+)
+for res in results:
+    print(f"Hybrid: {res['hybrid_score']:.4f}")
+    print(f"Vector: {res['vector_score']:.4f}")
+    print(f"Keyword: {res['keyword_score']:.4f}")
+```
+
+**How It Works:**
+- **Vector Search**: Captures semantic meaning and contextual understanding
+- **Keyword Search (BM25)**: Ensures exact term matching and lexical relevance
+- **Alpha Parameter**: Controls the balance (0-1)
+  - `alpha=1.0`: Pure vector similarity search
+  - `alpha=0.5`: Balanced hybrid (default)
+  - `alpha=0.0`: Pure keyword search
+- **Benefits**: Best of both worlds - semantic understanding + exact term matching
+
+**When to Use Hybrid Search:**
+- Queries with specific terms or proper nouns (e.g., "OpenAI GPT-4", "BERT model")
+- Technical terminology (e.g., "BM25", "cosine similarity")
+- Domain-specific content (medical terms, legal jargon, product names)
+- Exact phrases or acronyms
+
+**Recommended Alpha Values:**
+- `alpha=0.7-0.9`: When semantic understanding is more important
+- `alpha=0.5`: Balanced approach (default)
+- `alpha=0.1-0.3`: When exact term matching is critical
+
 ### Two-Stage Retrieval with Reranking
 
 Enable reranking for improved retrieval precision:
@@ -181,6 +241,40 @@ print(result['answer'])
 - **Benefits**: Combines speed of vector search with accuracy of cross-encoders
 - **Performance**: ~100-200ms latency increase with significantly better precision
 
+### Combining Hybrid Search + Reranking (Maximum Quality)
+
+For the best retrieval quality, combine both techniques:
+
+```python
+from rag_app.pipeline import RAGPipeline
+
+# Enable both hybrid search and reranking
+pipeline = RAGPipeline(
+    use_hybrid=True,
+    use_reranker=True,
+    hybrid_alpha=0.5
+)
+pipeline.ingest_documents(documents)
+
+# Three-stage retrieval:
+# 1. Vector similarity (retrieve 20 candidates)
+# 2. Hybrid re-scoring (vector + keyword)
+# 3. Cross-encoder reranking (final top 3)
+result = pipeline.query(
+    "What are transformers in deep learning?",
+    top_k=3,
+    initial_k=20
+)
+print(result['answer'])
+```
+
+**Retrieval Pipeline:**
+1. **Stage 1**: Fast vector similarity retrieves 20+ candidates
+2. **Stage 2**: Hybrid scoring combines vector + keyword scores
+3. **Stage 3**: Cross-encoder reranking selects final top K
+
+This approach provides maximum retrieval quality by leveraging semantic search, keyword matching, and precision reranking.
+
 ### Legacy Scripts
 
 The original monolithic scripts are still available:
@@ -205,16 +299,25 @@ Embeddings are stored in Pinecone's serverless index with metadata including the
 ### 4. Semantic Search
 User queries are embedded and compared against stored vectors using cosine similarity to retrieve the most relevant chunks.
 
-### 5. Answer Generation
-Retrieved chunks are passed as context to Llama 3.3 70B, which generates a grounded answer based only on the provided information.
+### 5. Hybrid Search (Optional)
+For improved retrieval, combine vector similarity with BM25 keyword matching:
+1. **Vector Search**: Performs semantic similarity search
+2. **Keyword Search**: Applies BM25 ranking algorithm for exact term matching
+3. **Score Combination**: Weighted combination using alpha parameter (0-1)
+4. Return top K candidates with combined scores
+
+This approach balances semantic understanding with lexical matching, particularly effective for queries with specific terms or technical terminology.
 
 ### 6. Two-Stage Retrieval (Optional)
 For improved precision, the system can:
-1. **Stage 1**: Retrieve 15-50 candidates using fast vector similarity search
+1. **Stage 1**: Retrieve 15-50 candidates using fast vector similarity search (or hybrid search)
 2. **Stage 2**: Rerank candidates with cross-encoder model for accurate relevance scoring
 3. Return top K most relevant results
 
 This approach combines the speed of bi-encoder embeddings with the precision of cross-encoder models, improving retrieval quality with minimal latency increase (~100-200ms).
+
+### 7. Answer Generation
+Retrieved chunks are passed as context to Llama 3.3 70B, which generates a grounded answer based only on the provided information.
 
 ## Project Structure
 
@@ -227,6 +330,7 @@ rag-openrouter/
 │   ├── vector_store.py       # Pinecone vector database operations
 │   ├── document_processor.py # Document chunking logic
 │   ├── retriever.py          # Semantic search retrieval
+│   ├── hybrid_search.py      # BM25 keyword + vector hybrid search
 │   ├── reranker.py           # Cross-encoder reranking
 │   ├── generator.py          # LLM answer generation
 │   ├── pdf_loader.py         # PDF document loader
@@ -234,6 +338,7 @@ rag-openrouter/
 ├── rag-docs/                  # Sample PDF documents for testing
 ├── example.py                 # Example usage of modular pipeline
 ├── example_streaming.py       # Streaming responses example
+├── example_hybrid_search.py   # Hybrid search (vector + keyword) example
 ├── example_reranking.py       # Two-stage retrieval example
 ├── example_pdf_loader.py      # PDF loader usage example
 ├── generate_pdfs.py           # Script to generate sample PDFs
@@ -254,6 +359,7 @@ The modular design separates concerns:
 - **vector_store.py**: Abstracts Pinecone operations (upsert, query, delete)
 - **document_processor.py**: Text chunking with LangChain splitters
 - **retriever.py**: Combines embeddings + vector search for semantic retrieval
+- **hybrid_search.py**: BM25 keyword matching combined with vector similarity
 - **reranker.py**: Cross-encoder models for precision reranking
 - **generator.py**: LLM-based answer generation with context and streaming
 - **pdf_loader.py**: PDF document loading with metadata support

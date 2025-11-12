@@ -8,18 +8,28 @@ from .document_processor import DocumentProcessor
 from .retriever import Retriever
 from .generator import Generator
 from .reranker import Reranker
+from .hybrid_search import HybridSearcher
 
 
 class RAGPipeline:
     """Complete RAG pipeline orchestrator"""
 
-    def __init__(self, config: Config = None, use_reranker: bool = False):
+    def __init__(
+        self,
+        config: Config = None,
+        use_reranker: bool = False,
+        use_hybrid: bool = False,
+        hybrid_alpha: float = 0.5
+    ):
         """
         Initialize RAG pipeline
 
         Args:
             config: Application configuration (uses env defaults if not provided)
             use_reranker: Whether to enable two-stage retrieval with reranking
+            use_hybrid: Whether to enable hybrid search (vector + keyword)
+            hybrid_alpha: Weight for vector vs keyword in hybrid search (0-1)
+                         alpha=1.0: pure vector, alpha=0.0: pure keyword, alpha=0.5: balanced
         """
         if config is None:
             config = Config.from_env()
@@ -35,11 +45,15 @@ class RAGPipeline:
         # Initialize reranker if requested
         self.reranker = Reranker() if use_reranker else None
 
+        # Initialize hybrid searcher if requested
+        self.hybrid_searcher = HybridSearcher(alpha=hybrid_alpha) if use_hybrid else None
+
         self.retriever = Retriever(
             config,
             self.embedding_service,
             self.vector_store,
-            self.reranker
+            self.reranker,
+            self.hybrid_searcher
         )
         self.generator = Generator(config)
 
@@ -97,6 +111,7 @@ class RAGPipeline:
         return_sources: bool = True,
         stream: bool = False,
         use_reranking: bool = None,
+        use_hybrid: bool = None,
         initial_k: int = None
     ) -> Dict[str, Any]:
         """
@@ -108,7 +123,8 @@ class RAGPipeline:
             return_sources: Whether to include source chunks in response
             stream: If True, returns streaming response
             use_reranking: Whether to use two-stage retrieval (default: True if reranker enabled)
-            initial_k: Number of candidates for reranking (default: top_k * 5)
+            use_hybrid: Whether to use hybrid search (default: True if hybrid_searcher enabled)
+            initial_k: Number of candidates for reranking/hybrid (default: top_k * 5)
 
         Returns:
             Dictionary with answer/stream and metadata
@@ -118,8 +134,14 @@ class RAGPipeline:
             result = pipeline.query("What is RAG?")
             print(result['answer'])
 
+            # Hybrid search (vector + keyword)
+            result = pipeline.query("What is RAG?", top_k=3, use_hybrid=True, initial_k=20)
+
             # With two-stage retrieval (retrieve 15, rerank to top 3)
             result = pipeline.query("What is RAG?", top_k=3, use_reranking=True, initial_k=15)
+
+            # Hybrid + reranking (best quality)
+            result = pipeline.query("What is RAG?", top_k=3, use_hybrid=True, use_reranking=True, initial_k=20)
 
             # Streaming
             result = pipeline.query("What is RAG?", stream=True)
@@ -130,11 +152,16 @@ class RAGPipeline:
         if use_reranking is None:
             use_reranking = self.reranker is not None
 
+        # Default: use hybrid if hybrid_searcher is available
+        if use_hybrid is None:
+            use_hybrid = self.hybrid_searcher is not None
+
         # Retrieve relevant chunks
         context = self.retriever.retrieve_texts(
             question,
             top_k=top_k,
             use_reranking=use_reranking,
+            use_hybrid=use_hybrid,
             initial_k=initial_k
         )
 
