@@ -7,17 +7,19 @@ from .vector_store import VectorStore
 from .document_processor import DocumentProcessor
 from .retriever import Retriever
 from .generator import Generator
+from .reranker import Reranker
 
 
 class RAGPipeline:
     """Complete RAG pipeline orchestrator"""
 
-    def __init__(self, config: Config = None):
+    def __init__(self, config: Config = None, use_reranker: bool = False):
         """
         Initialize RAG pipeline
 
         Args:
             config: Application configuration (uses env defaults if not provided)
+            use_reranker: Whether to enable two-stage retrieval with reranking
         """
         if config is None:
             config = Config.from_env()
@@ -29,7 +31,16 @@ class RAGPipeline:
         self.embedding_service = EmbeddingService(config)
         self.vector_store = VectorStore(config)
         self.document_processor = DocumentProcessor(config)
-        self.retriever = Retriever(config, self.embedding_service, self.vector_store)
+
+        # Initialize reranker if requested
+        self.reranker = Reranker() if use_reranker else None
+
+        self.retriever = Retriever(
+            config,
+            self.embedding_service,
+            self.vector_store,
+            self.reranker
+        )
         self.generator = Generator(config)
 
     def ingest_documents(
@@ -70,32 +81,48 @@ class RAGPipeline:
         question: str,
         top_k: int = None,
         return_sources: bool = True,
-        stream: bool = False
+        stream: bool = False,
+        use_reranking: bool = None,
+        initial_k: int = None
     ) -> Dict[str, Any]:
         """
         Query the RAG system
 
         Args:
             question: User question
-            top_k: Number of chunks to retrieve
+            top_k: Number of chunks to retrieve (final count)
             return_sources: Whether to include source chunks in response
             stream: If True, returns streaming response
+            use_reranking: Whether to use two-stage retrieval (default: True if reranker enabled)
+            initial_k: Number of candidates for reranking (default: top_k * 5)
 
         Returns:
             Dictionary with answer/stream and metadata
 
         Examples:
-            # Non-streaming
+            # Standard retrieval
             result = pipeline.query("What is RAG?")
             print(result['answer'])
+
+            # With two-stage retrieval (retrieve 15, rerank to top 3)
+            result = pipeline.query("What is RAG?", top_k=3, use_reranking=True, initial_k=15)
 
             # Streaming
             result = pipeline.query("What is RAG?", stream=True)
             for chunk in result['stream']:
                 print(chunk, end="", flush=True)
         """
+        # Default: use reranking if reranker is available
+        if use_reranking is None:
+            use_reranking = self.reranker is not None
+
         # Retrieve relevant chunks
-        context = self.retriever.retrieve_texts(question, top_k=top_k)
+        context = self.retriever.retrieve_texts(
+            question,
+            top_k=top_k,
+            use_reranking=use_reranking,
+            initial_k=initial_k
+        )
 
         # Generate answer
         result = self.generator.generate_with_metadata(question, context, stream=stream)

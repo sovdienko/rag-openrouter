@@ -12,8 +12,11 @@ This project demonstrates a full RAG implementation that combines document chunk
 - **Vector Embeddings**: Generate high-quality embeddings using OpenAI's text-embedding-3-large (3072 dimensions)
 - **Vector Storage**: Pinecone serverless vector database with cosine similarity search
 - **Semantic Retrieval**: Find relevant document chunks based on query similarity
+- **Two-Stage Retrieval**: Optional reranking with cross-encoder models for improved precision
 - **LLM Generation**: Answer questions using retrieved context with Meta's Llama 3.3 70B
+- **Streaming Responses**: Real-time text generation for better user experience
 - **Complete RAG Pipeline**: End-to-end workflow from document ingestion to answer generation
+- **Modular Architecture**: Clean separation of concerns for easy customization
 - Environment-based configuration for API keys
 
 ## Requirements
@@ -23,6 +26,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - python-dotenv >= 1.0.0
 - pinecone-client >= 3.0.0
 - langchain-text-splitters >= 1.0.0
+- sentence-transformers >= 5.0.0 (optional, for reranking)
 
 ## Installation
 
@@ -97,6 +101,39 @@ answer = pipeline.query("Your question here?")
 print(answer['answer'])
 ```
 
+### Two-Stage Retrieval with Reranking
+
+Enable reranking for improved retrieval precision:
+
+```bash
+python example_reranking.py
+```
+
+Or use programmatically:
+
+```python
+from rag_app.pipeline import RAGPipeline
+
+# Enable reranker during initialization
+pipeline = RAGPipeline(use_reranker=True)
+pipeline.ingest_documents(documents)
+
+# Two-stage retrieval: retrieve 15 candidates, rerank to top 3
+result = pipeline.query(
+    "Your question?",
+    top_k=3,
+    use_reranking=True,
+    initial_k=15
+)
+print(result['answer'])
+```
+
+**How It Works:**
+- **Stage 1**: Fast bi-encoder retrieves 15-50 candidates using vector similarity
+- **Stage 2**: Cross-encoder reranks candidates for precise relevance scoring
+- **Benefits**: Combines speed of vector search with accuracy of cross-encoders
+- **Performance**: ~100-200ms latency increase with significantly better precision
+
 ### Legacy Scripts
 
 The original monolithic scripts are still available:
@@ -124,6 +161,14 @@ User queries are embedded and compared against stored vectors using cosine simil
 ### 5. Answer Generation
 Retrieved chunks are passed as context to Llama 3.3 70B, which generates a grounded answer based only on the provided information.
 
+### 6. Two-Stage Retrieval (Optional)
+For improved precision, the system can:
+1. **Stage 1**: Retrieve 15-50 candidates using fast vector similarity search
+2. **Stage 2**: Rerank candidates with cross-encoder model for accurate relevance scoring
+3. Return top K most relevant results
+
+This approach combines the speed of bi-encoder embeddings with the precision of cross-encoder models, improving retrieval quality with minimal latency increase (~100-200ms).
+
 ## Project Structure
 
 ```
@@ -135,9 +180,12 @@ rag-openrouter/
 │   ├── vector_store.py       # Pinecone vector database operations
 │   ├── document_processor.py # Document chunking logic
 │   ├── retriever.py          # Semantic search retrieval
+│   ├── reranker.py           # Cross-encoder reranking
 │   ├── generator.py          # LLM answer generation
 │   └── pipeline.py           # Main RAG pipeline orchestrator
 ├── example.py                 # Example usage of modular pipeline
+├── example_streaming.py       # Streaming responses example
+├── example_reranking.py       # Two-stage retrieval example
 ├── rag-pipeline-pinecone.py  # Legacy monolithic implementation
 ├── chunk.py                   # Legacy chunking script
 ├── sample1.py                 # Legacy embedding example
@@ -155,7 +203,8 @@ The modular design separates concerns:
 - **vector_store.py**: Abstracts Pinecone operations (upsert, query, delete)
 - **document_processor.py**: Text chunking with LangChain splitters
 - **retriever.py**: Combines embeddings + vector search for semantic retrieval
-- **generator.py**: LLM-based answer generation with context
+- **reranker.py**: Cross-encoder models for precision reranking
+- **generator.py**: LLM-based answer generation with context and streaming
 - **pipeline.py**: Orchestrates all components into a unified workflow
 
 ## Configuration
