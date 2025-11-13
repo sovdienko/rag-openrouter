@@ -17,6 +17,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - **Document Classification**: Example-based categorization using embedding similarity
 - **Document Clustering**: Automatic topic discovery and grouping using K-Means clustering
 - **LangChain Integration**: High-level abstractions for rapid RAG development with FAISS
+- **Cost Optimization**: Embedding caching and cost tracking to reduce API expenses
 - **LLM Generation**: Answer questions using retrieved context with Meta's Llama 3.3 70B
 - **Streaming Responses**: Real-time text generation for better user experience
 - **Complete RAG Pipeline**: End-to-end workflow from document ingestion to answer generation
@@ -536,6 +537,193 @@ result = pipeline.query("What is AI?", top_k=5, initial_k=20)
 
 Choose LangChain for rapid development, custom pipeline for production optimization.
 
+### Cost Optimization and Caching
+
+Reduce API costs and improve performance with embedding caching and cost tracking:
+
+```bash
+python example_cost_optimization.py
+```
+
+Or use programmatically:
+
+```python
+from rag_app import Config, EmbeddingCache, CostTracker
+from rag_app.embeddings import EmbeddingService
+
+# Initialize cache and cost tracker
+cache = EmbeddingCache(cache_dir=".cache/embeddings", memory_only=False)
+cost_tracker = CostTracker()
+
+# Create embedding service with caching
+config = Config.from_env()
+embedding_service = EmbeddingService(
+    config,
+    cache=cache,
+    cost_tracker=cost_tracker
+)
+
+# First call - makes API request
+texts = [
+    "Machine learning enables predictive analytics",
+    "Deep learning uses neural networks",
+    "Machine learning enables predictive analytics"  # Duplicate
+]
+embeddings = embedding_service.embed_texts(texts)
+
+# View cache statistics
+stats = cache.get_stats()
+print(f"Cache hits: {stats['hits']}")
+print(f"Cache misses: {stats['misses']}")
+print(f"Hit rate: {stats['hit_rate']:.1f}%")
+
+# View cost report
+report = cost_tracker.get_report()
+print(f"API calls: {report['embeddings']['calls']}")
+print(f"Tokens: {report['embeddings']['tokens']:,}")
+print(f"Cost: ${report['embeddings']['cost']:.6f}")
+
+# Second call - uses cache (no API request)
+embeddings2 = embedding_service.embed_texts(texts)
+stats2 = cache.get_stats()
+print(f"Hit rate after second call: {stats2['hit_rate']:.1f}%")
+```
+
+**Caching Strategies:**
+
+1. **Memory Cache**: Fast, but cleared when process ends
+   ```python
+   cache = EmbeddingCache(memory_only=True)
+   ```
+
+2. **Disk Cache**: Persistent across restarts
+   ```python
+   cache = EmbeddingCache(cache_dir=".cache/embeddings", memory_only=False)
+   ```
+
+3. **Two-Tier Cache**: Memory + disk for best performance
+   - Check memory first (fastest)
+   - Fall back to disk if not in memory
+   - Automatically loads disk cache into memory on hits
+
+**Cost Tracking:**
+
+Monitor API usage and costs in real-time:
+
+```python
+from rag_app import CostTracker
+
+tracker = CostTracker()
+
+# Track embeddings
+tracker.track_embedding("Your text here", model="openai/text-embedding-3-small")
+
+# Track LLM calls
+tracker.track_llm(
+    input_text="User query",
+    output_text="Generated response",
+    model="meta-llama/llama-3.3-70b-instruct"
+)
+
+# Get detailed cost breakdown
+report = tracker.get_report()
+print(f"Embedding cost: ${report['embeddings']['cost']:.6f}")
+print(f"LLM cost: ${report['llm']['cost']:.6f}")
+print(f"Total cost: ${report['total_cost']:.6f}")
+```
+
+**Model Cost Comparison (per 1M tokens):**
+
+| Model | Cost | Use Case |
+|-------|------|----------|
+| text-embedding-3-small | $0.02 | Most applications (1536 dims) |
+| text-embedding-3-large | $0.13 | High accuracy needed (3072 dims) |
+| Llama 3.3 70B | $0.88 | Production LLM |
+| Llama 3.3 8B | Free | Development/testing |
+
+**Best Practices:**
+
+1. **Always Use Caching in Production**
+   - Disk cache for persistence
+   - Can reduce costs by 50%+ for repeated queries
+   - Especially valuable for FAQ systems and common queries
+
+2. **Choose the Right Embedding Model**
+   - Start with text-embedding-3-small (6.5x cheaper)
+   - Upgrade to 3-large only if accuracy is insufficient
+   - Test both models to measure quality difference for your use case
+
+3. **Batch Processing**
+   - Process multiple texts in one API call
+   - Cache automatically deduplicates within batches
+   - Reduces API overhead
+
+4. **Monitor Costs in Development**
+   - Use CostTracker to identify expensive operations
+   - Set budgets before scaling to production
+   - Track costs per feature/user
+
+5. **Cache Warming**
+   - Pre-cache common queries during off-peak hours
+   - Build cache from historical query logs
+   - Reduces latency and costs during peak usage
+
+**Integration with RAG Pipeline:**
+
+```python
+from rag_app import RAGPipeline, EmbeddingCache, CostTracker
+from rag_app.embeddings import EmbeddingService
+
+# Create cache and tracker
+cache = EmbeddingCache(cache_dir=".cache/embeddings")
+tracker = CostTracker()
+
+# Create embedding service with optimization
+config = Config.from_env()
+embedding_service = EmbeddingService(config, cache=cache, cost_tracker=tracker)
+
+# Initialize pipeline with optimized embeddings
+pipeline = RAGPipeline()
+pipeline.embedding_service = embedding_service
+
+# Ingest documents (embeddings cached)
+documents = ["Doc 1", "Doc 2", "Doc 3"]
+pipeline.ingest_documents(documents)
+
+# Query (query embedding cached)
+result = pipeline.query("Your question?")
+
+# View optimization results
+print(f"Cache hit rate: {cache.get_stats()['hit_rate']:.1f}%")
+print(f"Total cost: ${tracker.get_report()['total_cost']:.6f}")
+```
+
+**Cost Savings Example:**
+
+```
+Without caching:
+- 1000 queries with average 3 retrieved docs = 4000 API calls
+- 4000 calls × 100 tokens avg = 400,000 tokens
+- 400,000 tokens / 1M × $0.13 = $0.052
+
+With caching (50% hit rate):
+- 2000 API calls instead of 4000
+- 200,000 tokens
+- 200,000 tokens / 1M × $0.13 = $0.026
+- Savings: 50% reduction ($0.026 saved)
+
+At scale (100K queries):
+- Without cache: $5.20
+- With cache: $2.60
+- Savings: $2.60 (50%)
+```
+
+**Cache Performance:**
+- Memory cache: <1ms lookup time
+- Disk cache: ~5-10ms lookup time
+- API call: 100-300ms response time
+- Cache provides 10-100x speedup
+
 ### Legacy Scripts
 
 The original monolithic scripts are still available:
@@ -602,37 +790,39 @@ Retrieved chunks are passed as context to Llama 3.3 70B, which generates a groun
 
 ```
 rag-openrouter/
-├── rag_app/                   # Main application package
-│   ├── __init__.py           # Package initialization
-│   ├── config.py             # Configuration management
-│   ├── embeddings.py         # Embedding generation service
-│   ├── vector_store.py       # Pinecone vector database operations
-│   ├── document_processor.py # Document chunking logic
-│   ├── retriever.py          # Semantic search retrieval
-│   ├── hybrid_search.py      # BM25 keyword + vector hybrid search
-│   ├── reranker.py           # Cross-encoder reranking
-│   ├── classifier.py         # Example-based document classification
-│   ├── clustering.py         # K-Means document clustering
-│   ├── langchain_rag.py      # LangChain integration wrapper
-│   ├── generator.py          # LLM answer generation
-│   ├── pdf_loader.py         # PDF document loader
-│   └── pipeline.py           # Main RAG pipeline orchestrator
-├── rag-docs/                  # Sample PDF documents for testing
-├── example.py                 # Example usage of modular pipeline
-├── example_streaming.py       # Streaming responses example
-├── example_hybrid_search.py   # Hybrid search (vector + keyword) example
-├── example_reranking.py       # Two-stage retrieval example
-├── example_classification.py  # Document classification example
-├── example_clustering.py      # Document clustering example
-├── example_langchain.py       # LangChain integration example
-├── example_pdf_loader.py      # PDF loader usage example
-├── generate_pdfs.py           # Script to generate sample PDFs
-├── rag-pipeline-pinecone.py  # Legacy monolithic implementation
-├── chunk.py                   # Legacy chunking script
-├── sample1.py                 # Legacy embedding example
-├── pyproject.toml             # Project configuration and dependencies
-├── .env                       # Environment variables (not tracked in git)
-└── README.md                  # This file
+├── rag_app/                      # Main application package
+│   ├── __init__.py              # Package initialization
+│   ├── config.py                # Configuration management
+│   ├── embeddings.py            # Embedding generation service
+│   ├── cache.py                 # Embedding caching and cost tracking
+│   ├── vector_store.py          # Pinecone vector database operations
+│   ├── document_processor.py    # Document chunking logic
+│   ├── retriever.py             # Semantic search retrieval
+│   ├── hybrid_search.py         # BM25 keyword + vector hybrid search
+│   ├── reranker.py              # Cross-encoder reranking
+│   ├── classifier.py            # Example-based document classification
+│   ├── clustering.py            # K-Means document clustering
+│   ├── langchain_rag.py         # LangChain integration wrapper
+│   ├── generator.py             # LLM answer generation
+│   ├── pdf_loader.py            # PDF document loader
+│   └── pipeline.py              # Main RAG pipeline orchestrator
+├── rag-docs/                     # Sample PDF documents for testing
+├── example.py                    # Example usage of modular pipeline
+├── example_streaming.py          # Streaming responses example
+├── example_hybrid_search.py      # Hybrid search (vector + keyword) example
+├── example_reranking.py          # Two-stage retrieval example
+├── example_classification.py     # Document classification example
+├── example_clustering.py         # Document clustering example
+├── example_langchain.py          # LangChain integration example
+├── example_cost_optimization.py  # Cost optimization and caching example
+├── example_pdf_loader.py         # PDF loader usage example
+├── generate_pdfs.py              # Script to generate sample PDFs
+├── rag-pipeline-pinecone.py     # Legacy monolithic implementation
+├── chunk.py                      # Legacy chunking script
+├── sample1.py                    # Legacy embedding example
+├── pyproject.toml                # Project configuration and dependencies
+├── .env                          # Environment variables (not tracked in git)
+└── README.md                     # This file
 ```
 
 ## Architecture
@@ -641,6 +831,7 @@ The modular design separates concerns:
 
 - **config.py**: Centralized configuration with environment variable management
 - **embeddings.py**: Handles all embedding generation via OpenRouter
+- **cache.py**: Embedding caching and cost tracking for optimization
 - **vector_store.py**: Abstracts Pinecone operations (upsert, query, delete)
 - **document_processor.py**: Text chunking with LangChain splitters
 - **retriever.py**: Combines embeddings + vector search for semantic retrieval

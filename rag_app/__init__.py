@@ -6,6 +6,7 @@ from .config import Config
 from .classifier import DocumentClassifier, cosine_similarity
 from .clustering import DocumentClusterer
 from .langchain_rag import LangChainRAG
+from .cache import EmbeddingCache, CostTracker
 
 __version__ = "1.0.0"
 
@@ -16,5 +17,7 @@ __all__ = [
     "DocumentClassifier",
     "DocumentClusterer",
     "LangChainRAG",
+    "EmbeddingCache",
+    "CostTracker",
     "cosine_similarity"
 ]
