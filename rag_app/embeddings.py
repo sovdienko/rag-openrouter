@@ -114,3 +114,63 @@ class EmbeddingService:
             Single embedding vector
         """
         return self.embed_texts(text)[0]
+
+    def batch_embed_documents(
+        self,
+        texts: List[str],
+        batch_size: int = 100,
+        show_progress: bool = False
+    ) -> List[List[float]]:
+        """
+        Process large document collections in batches for efficiency
+
+        Reduces API overhead by embedding multiple texts per request.
+        Automatically handles caching and deduplication.
+
+        Args:
+            texts: List of text strings to embed
+            batch_size: Number of texts per API request (default: 100)
+            show_progress: Print progress updates (default: False)
+
+        Returns:
+            List of embedding vectors in same order as input
+
+        Examples:
+            # Process 1000 documents in batches of 100
+            embeddings = service.batch_embed_documents(
+                texts=documents,
+                batch_size=100,
+                show_progress=True
+            )
+
+        Note:
+            - OpenRouter accepts arrays of up to several hundred texts per request
+            - Larger batch sizes reduce API overhead but may hit size limits
+            - Recommended batch_size: 50-200 depending on text length
+            - Caching happens automatically per text, not per batch
+        """
+        all_embeddings = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size
+
+        for batch_idx in range(0, len(texts), batch_size):
+            batch = texts[batch_idx:batch_idx + batch_size]
+
+            if show_progress:
+                current_batch = (batch_idx // batch_size) + 1
+                print(f"Processing batch {current_batch}/{total_batches} "
+                      f"({len(batch)} texts)...")
+
+            # Use existing embed_texts which handles caching automatically
+            batch_embeddings = self.embed_texts(batch)
+            all_embeddings.extend(batch_embeddings)
+
+        if show_progress:
+            if self.cache:
+                stats = self.cache.get_stats()
+                print(f"\nBatch processing complete!")
+                print(f"Total texts: {len(texts)}")
+                print(f"Cache hits: {stats['hits']}")
+                print(f"Cache misses: {stats['misses']}")
+                print(f"Hit rate: {stats['hit_rate']:.1f}%")
+
+        return all_embeddings
