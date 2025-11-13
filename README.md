@@ -16,6 +16,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - **Two-Stage Retrieval**: Optional reranking with cross-encoder models for improved precision
 - **Document Classification**: Example-based categorization using embedding similarity
 - **Document Clustering**: Automatic topic discovery and grouping using K-Means clustering
+- **LangChain Integration**: High-level abstractions for rapid RAG development with FAISS
 - **LLM Generation**: Answer questions using retrieved context with Meta's Llama 3.3 70B
 - **Streaming Responses**: Real-time text generation for better user experience
 - **Complete RAG Pipeline**: End-to-end workflow from document ingestion to answer generation
@@ -34,6 +35,10 @@ This project demonstrates a full RAG implementation that combines document chunk
 - sentence-transformers >= 5.0.0 (optional, for reranking)
 - rank-bm25 >= 0.2.2 (optional, for hybrid search)
 - scikit-learn >= 1.5.0 (optional, for clustering)
+- langchain >= 1.0.0 (optional, for LangChain integration)
+- langchain-openai >= 1.0.0 (optional, for LangChain integration)
+- langchain-community >= 0.4.0 (optional, for LangChain integration)
+- faiss-cpu >= 1.12.0 (optional, for local vector storage)
 
 ## Installation
 
@@ -434,6 +439,103 @@ for cluster_id, summary in summaries.items():
 - Combine with classification to label discovered clusters
 - Re-cluster periodically as data evolves
 
+### LangChain Integration
+
+Use LangChain for rapid RAG prototyping with high-level abstractions:
+
+```bash
+python example_langchain.py
+```
+
+Or use programmatically:
+
+```python
+from rag_app import LangChainRAG
+
+# Initialize (uses FAISS for local vector storage)
+rag = LangChainRAG(
+    model_name="meta-llama/llama-3.3-70b-instruct",
+    temperature=0.7,
+    chunk_size=1000,
+    chunk_overlap=200
+)
+
+# Load PDFs from folder
+docs = rag.load_from_folder("rag-docs")
+print(f"Loaded {len(docs)} documents")
+
+# Ingest documents
+stats = rag.ingest_documents(docs, top_k=3)
+print(f"Created {stats['num_chunks']} chunks")
+
+# Query the system
+result = rag.query("What is machine learning?")
+print(result['answer'])
+print(f"Sources: {result['num_sources']}")
+
+# Similarity search without LLM
+results = rag.similarity_search("neural networks", top_k=5)
+for result in results:
+    print(result['text'][:100])
+
+# Save vector store for later
+rag.save_vectorstore("my_vectorstore")
+
+# Load vector store
+rag2 = LangChainRAG()
+rag2.load_vectorstore("my_vectorstore")
+result = rag2.query("Explain deep learning")
+
+# Work with text strings directly
+texts = [
+    "Machine learning enables systems to learn from data",
+    "Neural networks are inspired by biological neurons",
+    "Deep learning uses multiple layers for feature extraction"
+]
+rag3 = LangChainRAG()
+rag3.ingest_documents(texts)
+result = rag3.query("What is deep learning?")
+```
+
+**How It Works:**
+- **LangChain Chains**: Pre-built RetrievalQA chain for question answering
+- **FAISS Vector Store**: Local vector storage (no cloud database required)
+- **Simplified API**: Fewer lines of code than custom pipeline
+- **Persistence**: Save/load vector stores to disk
+
+**Benefits:**
+- Rapid prototyping and MVPs
+- Local development without cloud dependencies
+- Built-in prompt engineering
+- Easy model experimentation
+- Declarative, high-level code
+
+**When to Use:**
+- Building quick prototypes
+- Experimenting with different approaches
+- Local development and testing
+- Learning RAG concepts
+- Prefer simplicity over fine control
+
+**Comparison with Custom Pipeline:**
+
+```python
+# LangChain (Simple & Fast)
+rag = LangChainRAG()
+docs = rag.load_from_folder("docs")
+rag.ingest_documents(docs)
+result = rag.query("What is AI?")
+
+# Custom Pipeline (More Control)
+pipeline = RAGPipeline(use_hybrid=True, use_reranker=True)
+loader = PDFLoader()
+docs = loader.load_with_metadata("docs")
+pipeline.ingest_documents(docs)
+result = pipeline.query("What is AI?", top_k=5, initial_k=20)
+```
+
+Choose LangChain for rapid development, custom pipeline for production optimization.
+
 ### Legacy Scripts
 
 The original monolithic scripts are still available:
@@ -510,6 +612,8 @@ rag-openrouter/
 │   ├── hybrid_search.py      # BM25 keyword + vector hybrid search
 │   ├── reranker.py           # Cross-encoder reranking
 │   ├── classifier.py         # Example-based document classification
+│   ├── clustering.py         # K-Means document clustering
+│   ├── langchain_rag.py      # LangChain integration wrapper
 │   ├── generator.py          # LLM answer generation
 │   ├── pdf_loader.py         # PDF document loader
 │   └── pipeline.py           # Main RAG pipeline orchestrator
@@ -519,6 +623,8 @@ rag-openrouter/
 ├── example_hybrid_search.py   # Hybrid search (vector + keyword) example
 ├── example_reranking.py       # Two-stage retrieval example
 ├── example_classification.py  # Document classification example
+├── example_clustering.py      # Document clustering example
+├── example_langchain.py       # LangChain integration example
 ├── example_pdf_loader.py      # PDF loader usage example
 ├── generate_pdfs.py           # Script to generate sample PDFs
 ├── rag-pipeline-pinecone.py  # Legacy monolithic implementation
@@ -541,6 +647,8 @@ The modular design separates concerns:
 - **hybrid_search.py**: BM25 keyword matching combined with vector similarity
 - **reranker.py**: Cross-encoder models for precision reranking
 - **classifier.py**: Example-based document classification using embedding similarity
+- **clustering.py**: K-Means clustering for automatic topic discovery
+- **langchain_rag.py**: LangChain integration with FAISS for rapid development
 - **generator.py**: LLM-based answer generation with context and streaming
 - **pdf_loader.py**: PDF document loading with metadata support
 - **pipeline.py**: Orchestrates all components into a unified workflow

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(uv add:*)",
       "Bash(python generate_pdfs.py:*)",
-      "Bash(uv run python:*)"
+      "Bash(uv run python:*)",
+      "Bash(uv pip:*)"
     ],
     "deny": [],
     "ask": []

@@ -5,6 +5,7 @@ from .pdf_loader import PDFLoader
 from .config import Config
 from .classifier import DocumentClassifier, cosine_similarity
 from .clustering import DocumentClusterer
+from .langchain_rag import LangChainRAG
 
 __version__ = "1.0.0"
 
@@ -14,5 +15,6 @@ __all__ = [
     "Config",
     "DocumentClassifier",
     "DocumentClusterer",
+    "LangChainRAG",
     "cosine_similarity"
 ]
