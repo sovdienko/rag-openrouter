@@ -19,6 +19,7 @@ This project demonstrates a full RAG implementation that combines document chunk
 - **LangChain Integration**: High-level abstractions for rapid RAG development with FAISS
 - **Cost Optimization**: Embedding caching and cost tracking to reduce API expenses
 - **Batch Processing**: Efficient processing of large document collections with configurable batch sizes
+- **Rate Limiting & Retry**: Automatic retry with exponential backoff and rate limit handling
 - **LLM Generation**: Answer questions using retrieved context with Meta's Llama 3.3 70B
 - **Streaming Responses**: Real-time text generation for better user experience
 - **Complete RAG Pipeline**: End-to-end workflow from document ingestion to answer generation
@@ -866,6 +867,176 @@ embeddings = service.batch_embed_documents(texts, batch_size=25)
 - With caching: 100-1000x speedup for repeated texts
 - API overhead: Reduced from 1000+ calls to 10-20 calls
 
+### Rate Limiting and Retry Logic
+
+Handle API rate limits and temporary failures gracefully with automatic retry and exponential backoff:
+
+```bash
+python example_rate_limiting.py
+```
+
+Or use programmatically:
+
+```python
+from rag_app import Config, RateLimiter
+from rag_app.embeddings import EmbeddingService
+
+config = Config.from_env()
+
+# Production-ready configuration
+rate_limiter = RateLimiter(requests_per_minute=50)
+service = EmbeddingService(
+    config,
+    rate_limiter=rate_limiter,
+    use_retry=True,
+    max_retries=5
+)
+
+# Automatic retry with exponential backoff
+documents = ["Document 1", "Document 2", "Document 3"]
+embeddings = service.embed_texts(documents)
+# If rate limit is hit, automatically retries with: 1s, 2s, 4s, 8s, 16s
+```
+
+**How It Works:**
+
+1. **Rate Limiting**: Prevents hitting API limits before they occur
+   ```python
+   limiter = RateLimiter(requests_per_minute=60)
+   service = EmbeddingService(config, rate_limiter=limiter)
+   ```
+
+2. **Automatic Retry**: Retries failed requests with exponential backoff
+   ```python
+   service = EmbeddingService(
+       config,
+       use_retry=True,
+       max_retries=3  # Retry up to 3 times
+   )
+   ```
+
+3. **Combined Approach**: Rate limiting + retry for maximum reliability
+   ```python
+   service = EmbeddingService(
+       config,
+       rate_limiter=RateLimiter(requests_per_minute=50),
+       use_retry=True,
+       max_retries=5
+   )
+   ```
+
+**Exponential Backoff:**
+
+When rate limits or temporary errors occur, the system automatically retries with increasing wait times:
+
+- Attempt 1: wait 1 second
+- Attempt 2: wait 2 seconds
+- Attempt 3: wait 4 seconds
+- Attempt 4: wait 8 seconds
+- Attempt 5: wait 16 seconds
+- Max wait: capped at 60 seconds
+
+**Error Detection:**
+
+The retry logic automatically detects and handles:
+
+| Error Type | Retry Behavior |
+|------------|----------------|
+| Rate Limit (429) | Retry with backoff |
+| Server Error (500, 502, 503) | Retry with backoff |
+| Connection Timeout | Retry with backoff |
+| Auth Error (401, 403) | Fail immediately |
+| Bad Request (400) | Fail immediately |
+
+**Using rate_limit_retry Decorator:**
+
+Apply retry logic to any function:
+
+```python
+from rag_app import rate_limit_retry
+
+@rate_limit_retry(max_retries=3, initial_wait=1.0, backoff_factor=2.0)
+def custom_api_call(text):
+    return client.embeddings.create(model="...", input=text)
+
+# Automatically retries on rate limit or temporary errors
+result = custom_api_call("Your text here")
+```
+
+**Rate Limiter as Context Manager:**
+
+```python
+from rag_app import RateLimiter, EmbeddingService
+
+limiter = RateLimiter(requests_per_second=2)
+service = EmbeddingService(config)
+
+for text in documents:
+    with limiter:  # Automatically waits if needed
+        embedding = service.embed_text(text)
+```
+
+**Best Practices:**
+
+1. **Always enable retry for production**
+   - Prevents failures from transient errors
+   - Automatic recovery without manual intervention
+   - Use `max_retries=3-5` for critical operations
+
+2. **Set appropriate rate limits**
+   - Free tier: `requests_per_minute=10`
+   - Basic tier: `requests_per_minute=60`
+   - Pro tier: `requests_per_minute=300`
+   - Prevents hitting limits before they occur
+
+3. **Combine with caching**
+   ```python
+   service = EmbeddingService(
+       config,
+       cache=EmbeddingCache(cache_dir=".cache"),
+       rate_limiter=RateLimiter(requests_per_minute=50),
+       use_retry=True,
+       max_retries=5
+   )
+   ```
+
+4. **Monitor retry frequency**
+   - Frequent retries indicate rate limits are too high
+   - Adjust `requests_per_minute` based on actual usage
+   - Check logs for retry warnings
+
+**Production Configuration:**
+
+```python
+from rag_app import Config, EmbeddingCache, CostTracker, RateLimiter
+from rag_app.embeddings import EmbeddingService
+
+# Complete production setup
+service = EmbeddingService(
+    Config.from_env(),
+    cache=EmbeddingCache(cache_dir=".cache/embeddings"),
+    cost_tracker=CostTracker(),
+    rate_limiter=RateLimiter(requests_per_minute=50),
+    use_retry=True,
+    max_retries=5
+)
+```
+
+**Benefits:**
+
+- **Reliability**: Automatic recovery from transient failures
+- **Efficiency**: Prevents wasted quota on failed requests
+- **Cost savings**: Avoid rate limit penalties and failed requests
+- **Simplicity**: No manual retry logic needed
+- **Observability**: Built-in logging for monitoring
+
+**Performance Characteristics:**
+
+- No retry: Single request completes or fails (~100-300ms)
+- With retry: 1-3 retries typical for rate limits (~1-7 seconds total)
+- Rate limiting overhead: Minimal (<1ms per request)
+- Combined with caching: Retries only needed for new content
+
 ### Legacy Scripts
 
 The original monolithic scripts are still available:
@@ -937,6 +1108,7 @@ rag-openrouter/
 │   ├── config.py                # Configuration management
 │   ├── embeddings.py            # Embedding generation service
 │   ├── cache.py                 # Embedding caching and cost tracking
+│   ├── rate_limiting.py         # Rate limiting and retry utilities
 │   ├── vector_store.py          # Pinecone vector database operations
 │   ├── document_processor.py    # Document chunking logic
 │   ├── retriever.py             # Semantic search retrieval
@@ -958,6 +1130,7 @@ rag-openrouter/
 ├── example_langchain.py          # LangChain integration example
 ├── example_cost_optimization.py  # Cost optimization and caching example
 ├── example_batch_processing.py   # Batch processing for large collections
+├── example_rate_limiting.py      # Rate limiting and retry logic example
 ├── example_pdf_loader.py         # PDF loader usage example
 ├── generate_pdfs.py              # Script to generate sample PDFs
 ├── rag-pipeline-pinecone.py     # Legacy monolithic implementation
@@ -975,6 +1148,7 @@ The modular design separates concerns:
 - **config.py**: Centralized configuration with environment variable management
 - **embeddings.py**: Handles all embedding generation via OpenRouter
 - **cache.py**: Embedding caching and cost tracking for optimization
+- **rate_limiting.py**: Rate limiting and automatic retry with exponential backoff
 - **vector_store.py**: Abstracts Pinecone operations (upsert, query, delete)
 - **document_processor.py**: Text chunking with LangChain splitters
 - **retriever.py**: Combines embeddings + vector search for semantic retrieval

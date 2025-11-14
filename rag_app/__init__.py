@@ -7,6 +7,7 @@ from .classifier import DocumentClassifier, cosine_similarity
 from .clustering import DocumentClusterer
 from .langchain_rag import LangChainRAG
 from .cache import EmbeddingCache, CostTracker
+from .rate_limiting import RateLimiter, rate_limit_retry
 
 __version__ = "1.0.0"
 
@@ -19,5 +20,7 @@ __all__ = [
     "LangChainRAG",
     "EmbeddingCache",
     "CostTracker",
+    "RateLimiter",
+    "rate_limit_retry",
     "cosine_similarity"
 ]

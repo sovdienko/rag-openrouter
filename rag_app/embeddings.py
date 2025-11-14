@@ -4,6 +4,7 @@ from typing import List, Optional
 from openai import OpenAI
 from .config import Config
 from .cache import EmbeddingCache, CostTracker
+from .rate_limiting import rate_limit_retry, RateLimiter
 
 
 class EmbeddingService:
@@ -13,7 +14,10 @@ class EmbeddingService:
         self,
         config: Config,
         cache: Optional[EmbeddingCache] = None,
-        cost_tracker: Optional[CostTracker] = None
+        cost_tracker: Optional[CostTracker] = None,
+        rate_limiter: Optional[RateLimiter] = None,
+        use_retry: bool = True,
+        max_retries: int = 3
     ):
         """
         Initialize embedding service
@@ -22,6 +26,9 @@ class EmbeddingService:
             config: Application configuration
             cache: Optional embedding cache for cost optimization
             cost_tracker: Optional cost tracker for monitoring API usage
+            rate_limiter: Optional rate limiter to control request frequency
+            use_retry: Enable automatic retry with exponential backoff (default: True)
+            max_retries: Maximum retry attempts for failed requests (default: 3)
         """
         self.config = config
         self.client = OpenAI(
@@ -30,6 +37,43 @@ class EmbeddingService:
         )
         self.cache = cache
         self.cost_tracker = cost_tracker
+        self.rate_limiter = rate_limiter
+        self.use_retry = use_retry
+        self.max_retries = max_retries
+
+    def _call_api(self, texts: List[str]) -> List[List[float]]:
+        """
+        Internal method to call embedding API with optional rate limiting and retry
+
+        Args:
+            texts: List of texts to embed
+
+        Returns:
+            List of embeddings
+        """
+        # Apply rate limiting if configured
+        if self.rate_limiter:
+            self.rate_limiter.wait_if_needed()
+
+        # Define the API call function
+        def make_api_call():
+            response = self.client.embeddings.create(
+                model=self.config.embedding_model,
+                input=texts
+            )
+            return [item.embedding for item in response.data]
+
+        # Apply retry decorator if enabled
+        if self.use_retry:
+            decorated_call = rate_limit_retry(
+                max_retries=self.max_retries,
+                initial_wait=1.0,
+                max_wait=60.0,
+                backoff_factor=2.0
+            )(make_api_call)
+            return decorated_call()
+        else:
+            return make_api_call()
 
     def embed_texts(self, texts: List[str] | str) -> List[List[float]]:
         """
@@ -76,14 +120,11 @@ class EmbeddingService:
 
         # Make API call only for uncached texts
         if uncached_texts:
-            response = self.client.embeddings.create(
-                model=self.config.embedding_model,
-                input=uncached_texts
-            )
+            # Use _call_api which handles rate limiting and retries
+            embeddings = self._call_api(uncached_texts)
 
             # Store new embeddings in cache and results
-            for i, item in enumerate(response.data):
-                embedding = item.embedding
+            for i, embedding in enumerate(embeddings):
                 original_index = uncached_indices[i]
                 text = uncached_texts[i]
 
